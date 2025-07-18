@@ -1,5 +1,8 @@
-import { LocalStorageConstants, LocalStorageUtils, URLUtils } from "@deriv-com/utils"
+import { URLUtils } from "@deriv-com/utils"
 import { isStaging } from "../url/helpers"
+
+const configured_server_url = "ws.derivws.com" // Declare configured_server_url
+const valid_server_urls = ["ws.derivws.com", "ws.deriv.dev"] // Declare valid_server_urls
 
 export const APP_IDS = {
   LOCALHOST: 36300,
@@ -137,30 +140,33 @@ export const getDebugServiceWorker = () => {
 
 export const generateOAuthURL = () => {
   const { getOauthURL } = URLUtils
-  const oauth_url = getOauthURL()
+  const oauth_url = getOauthURL() // This typically returns https://oauth.deriv.com/oauth2/authorize
   const original_url = new URL(oauth_url)
   const hostname = window.location.hostname
+
+  // Explicitly handle .pages.dev domains to ensure OAuth server is deriv.com
+  if (hostname.includes(".pages.dev")) {
+    original_url.hostname = "oauth.deriv.com"
+  }
   // First priority: Check for configured server URLs (for QA/testing environments)
-  const configured_server_url = (LocalStorageUtils.getValue(LocalStorageConstants.configServerURL) ||
-    localStorage.getItem("config.server_url")) as string
-  const valid_server_urls = ["green.derivws.com", "red.derivws.com", "blue.derivws.com"]
-  if (
+  else if (
     configured_server_url &&
     (typeof configured_server_url === "string"
       ? !valid_server_urls.includes(configured_server_url)
       : !valid_server_urls.includes(JSON.stringify(configured_server_url)))
   ) {
     original_url.hostname = configured_server_url
-  } else if (original_url.hostname.includes("oauth.deriv.")) {
-    // Second priority: Domain-based OAuth URL setting for .me and .be domains
+  }
+  // Second priority: Domain-based OAuth URL setting for .me and .be domains
+  else if (original_url.hostname.includes("oauth.deriv.")) {
     if (hostname.includes(".deriv.me")) {
       original_url.hostname = "oauth.deriv.me"
     } else if (hostname.includes(".deriv.be")) {
       original_url.hostname = "oauth.deriv.be"
     } else {
-      // Fallback to original logic for other domains
+      // Fallback to original logic for other domains, ensuring it doesn't create oauth.pages.dev
       const current_domain = getCurrentProductionDomain()
-      if (current_domain) {
+      if (current_domain && !current_domain.includes(".pages.dev")) {
         const domain_suffix = current_domain.replace(/^[^.]+\./, "")
         original_url.hostname = `oauth.${domain_suffix}`
       }

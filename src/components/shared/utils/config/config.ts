@@ -1,11 +1,11 @@
-import { URLUtils } from "@deriv-com/utils"
+import { LocalStorageConstants, LocalStorageUtils } from "@deriv-com/utils"
 import { isStaging } from "../url/helpers"
 
 const configured_server_url = "ws.derivws.com" // Declare configured_server_url
 const valid_server_urls = ["ws.derivws.com", "ws.deriv.dev"] // Declare valid_server_urls
 
 export const APP_IDS = {
-  LOCALHOST: 36300,
+  LOCALHOST: 85653, // Updated to 85653 for testbot-d45.pages.dev
   TMP_STAGING: 64584,
   STAGING: 29934,
   STAGING_BE: 29934,
@@ -13,7 +13,6 @@ export const APP_IDS = {
   PRODUCTION: 65555,
   PRODUCTION_BE: 65556,
   PRODUCTION_ME: 65557,
-  TESTBOT_PAGES_DEV: 85653, // New App ID for testbot-d45.pages.dev
 }
 
 export const livechat_license_id = 12049137
@@ -27,7 +26,7 @@ export const domain_app_ids = {
   "dbot.deriv.com": APP_IDS.PRODUCTION,
   "dbot.deriv.be": APP_IDS.PRODUCTION_BE,
   "dbot.deriv.me": APP_IDS.PRODUCTION_ME,
-  "testbot-d45.pages.dev": APP_IDS.TESTBOT_PAGES_DEV, // New domain mapping
+  "testbot-d45.pages.dev": APP_IDS.LOCALHOST, // Mapped to LOCALHOST (85653)
 }
 
 export const getCurrentProductionDomain = () =>
@@ -71,7 +70,7 @@ export const getDefaultAppIdAndUrl = () => {
   const server_url = getDefaultServerURL()
   if (window.location.origin?.includes("testbot-d45.pages.dev")) {
     // Specific check for the new test domain
-    return { app_id: APP_IDS.TESTBOT_PAGES_DEV, server_url }
+    return { app_id: APP_IDS.LOCALHOST, server_url }
   }
   if (isTestLink()) {
     return { app_id: APP_IDS.LOCALHOST, server_url }
@@ -86,13 +85,15 @@ export const getAppId = () => {
   const config_app_id = window.localStorage.getItem("config.app_id")
   const current_domain = getCurrentProductionDomain() ?? ""
 
+  // Always use 85653 for testbot-d45.pages.dev
+  if (window.location.hostname === "testbot-d45.pages.dev") {
+    return APP_IDS.LOCALHOST // 85653
+  }
+
   if (config_app_id) {
     app_id = config_app_id
   } else if (isStaging()) {
     app_id = APP_IDS.STAGING
-  } else if (window.location.origin?.includes("testbot-d45.pages.dev")) {
-    // Specific check for the new test domain
-    app_id = APP_IDS.TESTBOT_PAGES_DEV
   } else if (isTestLink()) {
     app_id = APP_IDS.LOCALHOST
   } else {
@@ -109,8 +110,7 @@ export const getSocketURL = () => {
 }
 
 export const checkAndSetEndpointFromUrl = () => {
-  if (isTestLink() || window.location.origin?.includes("testbot-d45.pages.dev")) {
-    // Added new test domain check
+  if (isTestLink()) {
     const url_params = new URLSearchParams(location.search.slice(1))
     if (url_params.has("qa_server") && url_params.has("app_id")) {
       const qa_server = url_params.get("qa_server") || ""
@@ -139,38 +139,46 @@ export const getDebugServiceWorker = () => {
 }
 
 export const generateOAuthURL = () => {
-  const { getOauthURL } = URLUtils
-  const oauth_url = getOauthURL() // This typically returns https://oauth.deriv.com/oauth2/authorize
-  const original_url = new URL(oauth_url)
+  // Use your registered app ID for testbot-d45.pages.dev
+  const oauth_app_id = 85653
+
+  // Get the current hostname for the redirect URI
   const hostname = window.location.hostname
 
-  // Explicitly handle .pages.dev domains to ensure OAuth server is deriv.com
-  if (hostname.includes(".pages.dev")) {
-    original_url.hostname = "oauth.deriv.com"
+  // Construct the redirect URI - make sure this matches what you registered with Deriv
+  const redirect_uri = `https://${hostname}/callback`
+
+  // Get the server URL from config
+  const server_url =
+    LocalStorageUtils.getValue(LocalStorageConstants.configServerURL) ||
+    localStorage.getItem("config.server_url") ||
+    getSocketURL()
+
+  // Construct the base OAuth URL with all required parameters
+  const base_url = "https://oauth.deriv.com/oauth2/authorize"
+  const params = new URLSearchParams({
+    app_id: oauth_app_id.toString(),
+    l: "EN",
+    redirect_uri: redirect_uri,
+    response_type: "code",
+    brand: "deriv",
+  })
+
+  // Create the full OAuth URL
+  const oauth_url = `${base_url}?${params.toString()}`
+
+  // Create URL object for potential hostname modifications
+  const url_object = new URL(oauth_url)
+
+  // Check if we need to modify the hostname based on server configuration
+  const valid_server_urls = ["green.derivws.com", "red.derivws.com", "blue.derivws.com"]
+  if (typeof server_url === "string" && !valid_server_urls.includes(server_url) && server_url !== url_object.hostname) {
+    url_object.hostname = server_url
   }
-  // First priority: Check for configured server URLs (for QA/testing environments)
-  else if (
-    configured_server_url &&
-    (typeof configured_server_url === "string"
-      ? !valid_server_urls.includes(configured_server_url)
-      : !valid_server_urls.includes(JSON.stringify(configured_server_url)))
-  ) {
-    original_url.hostname = configured_server_url
-  }
-  // Second priority: Domain-based OAuth URL setting for .me and .be domains
-  else if (original_url.hostname.includes("oauth.deriv.")) {
-    if (hostname.includes(".deriv.me")) {
-      original_url.hostname = "oauth.deriv.me"
-    } else if (hostname.includes(".deriv.be")) {
-      original_url.hostname = "oauth.deriv.be"
-    } else {
-      // Fallback to original logic for other domains, ensuring it doesn't create oauth.pages.dev
-      const current_domain = getCurrentProductionDomain()
-      if (current_domain && !current_domain.includes(".pages.dev")) {
-        const domain_suffix = current_domain.replace(/^[^.]+\./, "")
-        original_url.hostname = `oauth.${domain_suffix}`
-      }
-    }
-  }
-  return original_url.toString() || oauth_url
+
+  // Debug output
+  console.log("Generated OAuth URL:", url_object.toString())
+
+  // Return the final URL
+  return url_object.toString()
 }

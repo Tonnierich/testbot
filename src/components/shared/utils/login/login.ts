@@ -1,7 +1,8 @@
 import { website_name } from "@/utils/site-config"
-import { getAppId, generateOAuthURL as getBaseOAuthURL } from "../config/config" // Import generateOAuthURL as getBaseOAuthURL
+import { domain_app_ids, getAppId } from "../config/config"
 import { CookieStorage, isStorageSupported, LocalStore } from "../storage/storage"
-import { getStaticUrl } from "../url" // Removed urlForCurrentDomain as it's no longer needed for OAuth URL construction
+import { getStaticUrl, urlForCurrentDomain } from "../url"
+import { deriv_urls } from "../url/constants"
 
 export const redirectToLogin = (is_logged_in: boolean, language: string, has_params = true, redirect_delay = 0) => {
   if (!is_logged_in && isStorageSupported(sessionStorage)) {
@@ -33,21 +34,32 @@ export const loginUrl = ({ language }: TLoginUrl) => {
     date_first_contact ? `&date_first_contact=${date_first_contact}` : ""
   }`
 
-  // If server_url is a QA server, use that directly
-  if (server_url && /qa/.test(server_url)) {
-    return `https://${server_url}/oauth2/authorize?app_id=${getAppId()}&l=${language}${marketing_queries}&brand=${website_name.toLowerCase()}`
+  // Use your app ID directly for the OAuth URL
+  const getOAuthUrl = () => {
+    // Use 85653 as the app ID for testbot-d45.pages.dev
+    return `https://oauth.${
+      deriv_urls.DERIV_HOST_NAME
+    }/oauth2/authorize?app_id=85653&l=${language}${marketing_queries}&brand=${website_name.toLowerCase()}`
   }
 
-  // Use the centralized generateOAuthURL from config.ts to get the base OAuth server URL
-  const baseOAuthUrl = getBaseOAuthURL()
-  const url = new URL(baseOAuthUrl)
+  // For QA environments
+  if (server_url && /qa/.test(server_url)) {
+    // Use 85653 as the app ID for QA as well
+    return `https://${server_url}/oauth2/authorize?app_id=85653&l=${language}${marketing_queries}&brand=${website_name.toLowerCase()}`
+  }
 
-  // Append all necessary parameters
-  url.searchParams.set("app_id", getAppId().toString())
-  url.searchParams.set("l", language)
-  url.searchParams.set("brand", website_name.toLowerCase())
+  // For your deployed site (testbot-d45.pages.dev)
+  if (window.location.hostname === "testbot-d45.pages.dev") {
+    // Use 85653 for your deployed site
+    return `https://oauth.${
+      deriv_urls.DERIV_HOST_NAME
+    }/oauth2/authorize?app_id=85653&l=${language}${marketing_queries}&brand=${website_name.toLowerCase()}`
+  }
 
-  // Append marketing queries manually as URLSearchParams doesn't handle raw query strings easily
-  const finalUrl = `${url.toString()}${marketing_queries}`
-  return finalUrl
+  // For other domains, use the dynamic approach
+  if (getAppId() === domain_app_ids[window.location.hostname as keyof typeof domain_app_ids]) {
+    return getOAuthUrl()
+  }
+
+  return urlForCurrentDomain(getOAuthUrl())
 }

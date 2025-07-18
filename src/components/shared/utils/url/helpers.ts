@@ -17,7 +17,7 @@ export const getActionFromUrl = () => {
 export const getPlatformFromUrl = (domain = window.location.hostname) => {
   const resolutions = {
     is_staging_deriv_app: /^staging-app\.deriv\.(com|me|be)$/i.test(domain),
-    is_deriv_app: /^app\.deriv\.com$/i.test(domain),
+    is_deriv_app: /^app\.deriv\.(com|me|be)$/i.test(domain),
     is_test_link: /^(.*)\.binary\.sx$/i.test(domain),
     is_test_deriv_app: /^test-app\.deriv\.com$/i.test(domain),
   }

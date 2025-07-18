@@ -6,15 +6,30 @@ import { LocalStorageConstants } from "@deriv-com/utils"
 import "./endpoint.scss"
 
 const Endpoint = () => {
+  // Get the current domain to suggest appropriate app ID
+  const currentDomain = window.location.hostname
+
+  // Function to get recommended app ID based on domain
+  const getRecommendedAppId = () => {
+    // If this is your domain, recommend your app ID (85653)
+    if (currentDomain.includes("testbot-d45.pages.dev")) {
+      return "85653"
+    }
+    return getAppId().toString()
+  }
+
   const formik = useFormik({
     initialValues: {
-      appId: localStorage.getItem(LocalStorageConstants.configAppId) ?? getAppId(),
+      appId: localStorage.getItem(LocalStorageConstants.configAppId) ?? getRecommendedAppId(),
       serverUrl: localStorage.getItem(LocalStorageConstants.configServerURL) ?? getSocketURL(),
     },
     onSubmit: (values) => {
       localStorage.setItem(LocalStorageConstants.configServerURL, values.serverUrl)
       localStorage.setItem(LocalStorageConstants.configAppId, values.appId.toString())
       formik.resetForm({ values })
+
+      // Reload the page to apply changes
+      window.location.reload()
     },
     validate: (values) => {
       const errors: { [key: string]: string } = {}
@@ -30,6 +45,12 @@ const Endpoint = () => {
     },
   })
 
+  // Function to test OAuth URL with current app ID
+  const testOAuthUrl = () => {
+    const oauthUrl = `https://oauth.deriv.com/oauth2/authorize?app_id=${formik.values.appId}`
+    window.open(oauthUrl, "_blank")
+  }
+
   return (
     <div className="endpoint">
       <Text weight="bold" className="endpoint__title">
@@ -44,6 +65,7 @@ const Endpoint = () => {
           onBlur={formik.handleBlur}
           onChange={formik.handleChange}
           value={formik.values.serverUrl}
+          hint="Example: green.derivws.com"
         />
         <Input
           data-testid="dt_endpoint_app_id_input"
@@ -53,6 +75,11 @@ const Endpoint = () => {
           onBlur={formik.handleBlur}
           onChange={formik.handleChange}
           value={formik.values.appId}
+          hint={
+            currentDomain.includes("testbot-d45.pages.dev")
+              ? "Recommended: 85653 for this domain"
+              : "Enter your registered Deriv OAuth App ID"
+          }
         />
         <div>
           <Button className="endpoint__button" disabled={!formik.dirty || !formik.isValid} type="submit">
@@ -77,6 +104,9 @@ const Endpoint = () => {
             type="button"
           >
             Reset to original settings
+          </Button>
+          <Button className="endpoint__button" color="primary" onClick={testOAuthUrl} variant="outlined" type="button">
+            Test OAuth URL
           </Button>
         </div>
       </form>

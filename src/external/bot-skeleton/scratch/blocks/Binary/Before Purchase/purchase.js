@@ -10,30 +10,24 @@ window.Blockly.Blocks.purchase = {
   },
   definition() {
     return {
-      message0: localize("Purchase {{ contract_type }}", { contract_type: "%1" }),
+      // Consolidated message0 with all placeholders
+      message0: localize("Purchase %1 Allow Bulk Purchase: %2 No. of Trades: %3"),
       args0: [
+        // All arguments are now in a single args0 array, matching message0 placeholders
         {
           type: "field_dropdown",
           name: "PURCHASE_LIST",
           options: [["", ""]],
         },
-      ],
-      // New message and args for "Allow Bulk Purchase"
-      message1: localize("Allow Bulk Purchase: %1"),
-      args1: [
         {
           type: "field_dropdown",
           name: "ALLOW_BULK_PURCHASE",
           options: [
             [localize("No"), "FALSE"],
             [localize("Yes"), "TRUE"],
-          ], // Default to No
-          value: "FALSE",
+          ],
+          value: "FALSE", // Default to No
         },
-      ],
-      // New message and args for "No. of Trades"
-      message2: localize("No. of Trades: %1"),
-      args2: [
         {
           type: "field_number",
           name: "NO_OF_TRADES",
@@ -43,6 +37,7 @@ window.Blockly.Blocks.purchase = {
         },
       ],
       previousStatement: null,
+      inputsInline: true, // This is crucial for rendering all inputs on one line
       colour: window.Blockly.Colours.Special1.colour,
       colourSecondary: window.Blockly.Colours.Special1.colourSecondary,
       colourTertiary: window.Blockly.Colours.Special1.colourTertiary,
@@ -104,16 +99,18 @@ window.Blockly.Blocks.purchase = {
 
 window.Blockly.JavaScript.javascriptGenerator.forBlock.purchase = (block) => {
   const purchaseList = block.getFieldValue("PURCHASE_LIST")
-  const allowBulkPurchase = block.getFieldValue("ALLOW_BULK_PURCHASE") // 'TRUE' or 'FALSE'
-  const noOfTrades = block.getFieldValue("NO_OF_TRADES") // number
+  const allowBulkPurchase = block.getFieldValue("ALLOW_BULK_PURCHASE")
+  const noOfTrades = block.getFieldValue("NO_OF_TRADES")
 
-  // Convert 'TRUE'/'FALSE' strings to boolean literals for JavaScript
+  // Debug logs (keep them for now to confirm it's working)
+  console.log("Generated Code Debug:")
+  console.log("PURCHASE_LIST:", purchaseList)
+  console.log("ALLOW_BULK_PURCHASE:", allowBulkPurchase)
+  console.log("NO_OF_TRADES:", noOfTrades)
+
   const allowBulkJs = allowBulkPurchase === "TRUE" ? "true" : "false"
 
-  // This generates the JavaScript code for the block.
-  // You might need to adjust how 'allowBulkJs' and 'noOfTrades' are used
-  // based on how your Deriv API wrapper (Bot.purchase) expects these parameters
-  // for bulk trading. This example assumes an options object.
   const code = `Bot.purchase('${purchaseList}', { allowBulk: ${allowBulkJs}, numTrades: ${noOfTrades} });\n`
+  console.log("Full generated code:", code)
   return code
 }

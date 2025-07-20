@@ -2,17 +2,16 @@ import { LogTypes } from "../../../constants/messages"
 import { api_base } from "../../api/api-base"
 import { contractStatus, info, log } from "../utils/broadcast"
 import { doUntilDone, getUUID, recoverFromError, tradeOptionToBuy } from "../utils/helpers"
-import { purchaseSuccessful } from "./state/actions"
-import { BEFORE_PURCHASE } from "./state/constants"
+import { purchaseSuccessful } from "./state/actions" // Import purchaseSuccessful
+import { BEFORE_PURCHASE, DURING_PURCHASE } from "./state/constants" // Import DURING_PURCHASE
 
 let delayIndex = 0
 let purchase_reference
 
 export default (Engine) =>
   class Purchase extends Engine {
-    // New helper method to encapsulate the logic for a single purchase
-    // Removed the scope check from here, as it's an internal helper.
-    async _performSinglePurchase(contract_type) {
+    async _performSinglePurchase(contract_type, isBulkPurchase = false) {
+      // Added isBulkPurchase parameter
       const onSuccess = (response) => {
         const { buy } = response
         contractStatus({
@@ -21,8 +20,8 @@ export default (Engine) =>
           buy,
         })
         this.contractId = buy.contract_id
-        // Keep dispatching purchaseSuccessful here for now, we'll re-evaluate if needed.
-        this.store.dispatch(purchaseSuccessful())
+        // Pass the isBulkPurchase flag to the action
+        this.store.dispatch(purchaseSuccessful(isBulkPurchase))
         if (this.is_proposal_subscription_required) {
           this.renewProposalsOnPurchase()
         }
@@ -35,7 +34,7 @@ export default (Engine) =>
           contract_type,
           buy_price: buy.buy_price,
         })
-        return buy // Return the buy object for further processing if needed
+        return buy
       }
 
       if (this.is_proposal_subscription_required) {
@@ -99,9 +98,7 @@ export default (Engine) =>
       ).then(onSuccess)
     }
 
-    // Modified purchase method to handle bulk options
     async purchase(contract_type, options = {}) {
-      // Keep this scope check here, as it's for the initial call to purchase
       if (this.store.getState().scope !== BEFORE_PURCHASE) {
         return Promise.resolve()
       }
@@ -113,25 +110,25 @@ export default (Engine) =>
         const purchaseResults = []
         for (let i = 0; i < numTrades; i++) {
           try {
-            // Add a small delay between purchases to avoid potential rate limits
             if (i > 0) {
-              await new Promise((resolve) => setTimeout(resolve, 500)) // 500ms delay
+              await new Promise((resolve) => setTimeout(resolve, 500))
             }
-            const result = await this._performSinglePurchase(contract_type)
+            // Pass true to _performSinglePurchase to indicate it's part of a bulk operation
+            const result = await this._performSinglePurchase(contract_type, true)
             purchaseResults.push({ status: "fulfilled", value: result })
             log(LogTypes.PURCHASE, { message: `Bulk purchase ${i + 1} successful.` })
           } catch (error) {
             purchaseResults.push({ status: "rejected", reason: error })
             log(LogTypes.PURCHASE, { message: `Bulk purchase ${i + 1} failed: ${error.message || error}` })
-            // Decide if you want to stop all further purchases on first error
-            // For now, it will continue trying remaining trades.
           }
         }
-        // You might want to return a summary of all purchases or the first successful one
-        // For simplicity, we'll just resolve after all attempts.
+        // After all bulk purchases are initiated, explicitly transition to DURING_PURCHASE
+        // This assumes that the bot's logic expects to be in DURING_PURCHASE after purchases.
+        // If this causes issues, we might need a more nuanced state management.
+        this.store.dispatch({ type: DURING_PURCHASE, payload: { isBulk: true } }) // Force transition for the overall state
         return Promise.resolve(purchaseResults)
       } else {
-        // If not bulk, perform a single purchase using the refactored method
+        // For single purchase, _performSinglePurchase will dispatch purchaseSuccessful(false) by default
         return this._performSinglePurchase(contract_type)
       }
     }

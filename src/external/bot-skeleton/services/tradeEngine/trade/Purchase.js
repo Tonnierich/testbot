@@ -11,6 +11,7 @@ let purchase_reference
 export default (Engine) =>
   class Purchase extends Engine {
     // New helper method to encapsulate the logic for a single purchase
+    // Removed the scope check from here, as it's an internal helper.
     async _performSinglePurchase(contract_type) {
       const onSuccess = (response) => {
         const { buy } = response
@@ -20,6 +21,7 @@ export default (Engine) =>
           buy,
         })
         this.contractId = buy.contract_id
+        // Keep dispatching purchaseSuccessful here for now, we'll re-evaluate if needed.
         this.store.dispatch(purchaseSuccessful())
         if (this.is_proposal_subscription_required) {
           this.renewProposalsOnPurchase()
@@ -99,7 +101,7 @@ export default (Engine) =>
 
     // Modified purchase method to handle bulk options
     async purchase(contract_type, options = {}) {
-      // Prevent calling purchase twice
+      // Keep this scope check here, as it's for the initial call to purchase
       if (this.store.getState().scope !== BEFORE_PURCHASE) {
         return Promise.resolve()
       }

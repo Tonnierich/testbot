@@ -106,23 +106,24 @@ export default (Engine) =>
 
     async purchase(contract_type, options = {}) {
       console.log("Purchase: Method called. Initial scope:", this.store.getState().scope)
-      // Initial check for the overall purchase operation
+      console.log("Purchase: Received options:", options) // New log
+      console.log("Purchase: Type of options:", typeof options) // New log
+      console.log("Purchase: Is options an object?", options && typeof options === "object" && !Array.isArray(options)) // New log
+
       if (this.store.getState().scope !== BEFORE_PURCHASE) {
         console.log("Purchase: Initial scope check failed. Exiting. Current scope:", this.store.getState().scope)
         return Promise.resolve()
       }
 
-      const { allowBulk = false, numTrades = 1 } = options
+      // Changed from destructuring to direct property access with nullish coalescing
+      const allowBulk = options?.allowBulk ?? false
+      const numTrades = options?.numTrades ?? 1
+
+      console.log("Purchase: Extracted allowBulk:", allowBulk, "numTrades:", numTrades) // New log
 
       if (allowBulk && numTrades > 1) {
         log(LogTypes.PURCHASE, { message: `Initiating ${numTrades} bulk purchases for ${contract_type}` })
         const purchaseResults = []
-
-        // TEMPORARY DIAGNOSTIC: Force scope to BEFORE_PURCHASE for bulk operations
-        // This is to test if the scope is being changed by something else immediately after the first trade.
-        // REMOVE THIS LINE AFTER DIAGNOSIS IF IT FIXES THE ISSUE.
-        this.store.dispatch({ type: BEFORE_PURCHASE }) // Explicitly set scope to BEFORE_PURCHASE
-        console.log("Purchase: Scope forced to BEFORE_PURCHASE for bulk. Current scope:", this.store.getState().scope)
 
         for (let i = 0; i < numTrades; i++) {
           console.log(

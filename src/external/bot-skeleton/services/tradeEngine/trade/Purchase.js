@@ -103,7 +103,6 @@ export default (Engine) =>
         return Promise.resolve()
       }
 
-      // Changed from destructuring to direct property access with nullish coalescing
       const allowBulk = options?.allowBulk ?? false
       const numTrades = options?.numTrades ?? 1
 

@@ -2,8 +2,8 @@ import { LogTypes } from "../../../constants/messages"
 import { api_base } from "../../api/api-base"
 import { contractStatus, info, log } from "../utils/broadcast"
 import { doUntilDone, getUUID, recoverFromError, tradeOptionToBuy } from "../utils/helpers"
-import { purchaseSuccessful } from "./state/actions" // Import purchaseSuccessful
-import { BEFORE_PURCHASE, DURING_PURCHASE } from "./state/constants" // Import DURING_PURCHASE
+import { purchaseSuccessful } from "./state/actions"
+import { BEFORE_PURCHASE, DURING_PURCHASE } from "./state/constants"
 
 let delayIndex = 0
 let purchase_reference
@@ -11,7 +11,7 @@ let purchase_reference
 export default (Engine) =>
   class Purchase extends Engine {
     async _performSinglePurchase(contract_type, isBulkPurchase = false) {
-      // Added isBulkPurchase parameter
+      console.log(`_performSinglePurchase: Starting for ${contract_type}, isBulkPurchase: ${isBulkPurchase}`)
       const onSuccess = (response) => {
         const { buy } = response
         contractStatus({
@@ -22,6 +22,11 @@ export default (Engine) =>
         this.contractId = buy.contract_id
         // Pass the isBulkPurchase flag to the action
         this.store.dispatch(purchaseSuccessful(isBulkPurchase))
+        console.log(
+          `_performSinglePurchase: Dispatched purchaseSuccessful(${isBulkPurchase}). Current scope after dispatch:`,
+          this.store.getState().scope,
+        )
+
         if (this.is_proposal_subscription_required) {
           this.renewProposalsOnPurchase()
         }
@@ -34,7 +39,8 @@ export default (Engine) =>
           contract_type,
           buy_price: buy.buy_price,
         })
-        return buy
+        console.log(`_performSinglePurchase: Completed for ${contract_type}`)
+        return buy // Return the buy object for further processing if needed
       }
 
       if (this.is_proposal_subscription_required) {
@@ -99,7 +105,10 @@ export default (Engine) =>
     }
 
     async purchase(contract_type, options = {}) {
+      console.log("Purchase: Method called. Initial scope:", this.store.getState().scope)
+      // Initial check for the overall purchase operation
       if (this.store.getState().scope !== BEFORE_PURCHASE) {
+        console.log("Purchase: Initial scope check failed. Exiting. Current scope:", this.store.getState().scope)
         return Promise.resolve()
       }
 
@@ -108,26 +117,47 @@ export default (Engine) =>
       if (allowBulk && numTrades > 1) {
         log(LogTypes.PURCHASE, { message: `Initiating ${numTrades} bulk purchases for ${contract_type}` })
         const purchaseResults = []
+
+        // TEMPORARY DIAGNOSTIC: Force scope to BEFORE_PURCHASE for bulk operations
+        // This is to test if the scope is being changed by something else immediately after the first trade.
+        // REMOVE THIS LINE AFTER DIAGNOSIS IF IT FIXES THE ISSUE.
+        this.store.dispatch({ type: BEFORE_PURCHASE }) // Explicitly set scope to BEFORE_PURCHASE
+        console.log("Purchase: Scope forced to BEFORE_PURCHASE for bulk. Current scope:", this.store.getState().scope)
+
         for (let i = 0; i < numTrades; i++) {
+          console.log(
+            `Purchase: Loop iteration ${i + 1}/${numTrades}. Current scope before _performSinglePurchase:`,
+            this.store.getState().scope,
+          )
           try {
             if (i > 0) {
               await new Promise((resolve) => setTimeout(resolve, 500))
+              console.log(
+                `Purchase: Delay finished for iteration ${i + 1}. Current scope:`,
+                this.store.getState().scope,
+              )
             }
-            // Pass true to _performSinglePurchase to indicate it's part of a bulk operation
-            const result = await this._performSinglePurchase(contract_type, true)
+            const result = await this._performSinglePurchase(contract_type, true) // Pass true for isBulkPurchase
             purchaseResults.push({ status: "fulfilled", value: result })
             log(LogTypes.PURCHASE, { message: `Bulk purchase ${i + 1} successful.` })
+            console.log(
+              `Purchase: _performSinglePurchase completed for iteration ${i + 1}. Current scope:`,
+              this.store.getState().scope,
+            )
           } catch (error) {
             purchaseResults.push({ status: "rejected", reason: error })
             log(LogTypes.PURCHASE, { message: `Bulk purchase ${i + 1} failed: ${error.message || error}` })
+            console.error(`Purchase: _performSinglePurchase failed for iteration ${i + 1}. Error:`, error)
+            // Decide if you want to stop all further purchases on first error
+            // For now, it will continue trying remaining trades.
           }
         }
         // After all bulk purchases are initiated, explicitly transition to DURING_PURCHASE
-        // This assumes that the bot's logic expects to be in DURING_PURCHASE after purchases.
-        // If this causes issues, we might need a more nuanced state management.
-        this.store.dispatch({ type: DURING_PURCHASE, payload: { isBulk: true } }) // Force transition for the overall state
+        this.store.dispatch({ type: DURING_PURCHASE, payload: { isBulk: true } })
+        console.log("Purchase: All bulk purchases attempted. Final scope set to DURING_PURCHASE.")
         return Promise.resolve(purchaseResults)
       } else {
+        console.log("Purchase: Performing single trade.")
         // For single purchase, _performSinglePurchase will dispatch purchaseSuccessful(false) by default
         return this._performSinglePurchase(contract_type)
       }

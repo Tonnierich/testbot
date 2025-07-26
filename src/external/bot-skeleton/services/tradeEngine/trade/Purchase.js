@@ -109,16 +109,19 @@ export default (Engine) =>
         log(LogTypes.PURCHASE, { message: `Initiating ${numTrades} bulk purchases for ${contract_type}` })
         const purchasePromises = []
 
-        // Fire off all purchase requests concurrently
         for (let i = 0; i < numTrades; i++) {
-          // No await here, so they all start almost simultaneously
+          // CRITICAL CHANGE: Do NOT await here.
+          // Push the promise returned by _performSinglePurchase directly into the array.
+          // This initiates all API calls concurrently.
           purchasePromises.push(
             this._performSinglePurchase(contract_type, true) // Pass true for isBulkPurchase
               .then((result) => {
+                // This .then() block will execute when an individual purchase promise resolves
                 log(LogTypes.PURCHASE, { message: `Bulk purchase ${i + 1} successful.` })
                 return { status: "fulfilled", value: result }
               })
               .catch((error) => {
+                // This .catch() block will execute if an individual purchase promise rejects
                 log(LogTypes.PURCHASE, { message: `Bulk purchase ${i + 1} failed: ${error.message || error}` })
                 console.error(`Purchase: _performSinglePurchase failed for iteration ${i + 1}. Error:`, error)
                 return { status: "rejected", reason: error }
@@ -126,11 +129,11 @@ export default (Engine) =>
           )
         }
 
-        // Wait for all purchase promises to settle (either fulfilled or rejected)
+        // Wait for ALL concurrently initiated purchase promises to settle (either fulfilled or rejected).
         const purchaseResults = await Promise.allSettled(purchasePromises)
 
-        // After all bulk purchases are initiated, explicitly transition to DURING_PURCHASE
-        // This ensures the bot moves to the next phase only after all intended bulk trades are sent.
+        // After all bulk purchases are initiated and their results are known,
+        // explicitly transition to DURING_PURCHASE.
         this.store.dispatch({ type: DURING_PURCHASE, payload: { isBulk: true } })
         return Promise.resolve(purchaseResults)
       } else {

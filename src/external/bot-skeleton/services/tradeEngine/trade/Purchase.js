@@ -107,24 +107,28 @@ export default (Engine) =>
 
       if (allowBulk && numTrades > 1) {
         log(LogTypes.PURCHASE, { message: `Initiating ${numTrades} bulk purchases for ${contract_type}` })
-        const purchaseResults = []
+        const purchasePromises = []
+
+        // Fire off all purchase requests concurrently
         for (let i = 0; i < numTrades; i++) {
-          try {
-            // Add a small delay between bulk purchases to avoid rate limits or overwhelming the API
-            if (i > 0) {
-              await new Promise((resolve) => setTimeout(resolve, 500))
-            }
-            const result = await this._performSinglePurchase(contract_type, true) // Pass true for isBulkPurchase
-            purchaseResults.push({ status: "fulfilled", value: result })
-            log(LogTypes.PURCHASE, { message: `Bulk purchase ${i + 1} successful.` })
-          } catch (error) {
-            purchaseResults.push({ status: "rejected", reason: error })
-            log(LogTypes.PURCHASE, { message: `Bulk purchase ${i + 1} failed: ${error.message || error}` })
-            console.error(`Purchase: _performSinglePurchase failed for iteration ${i + 1}. Error:`, error)
-            // Decide if you want to stop all further purchases on first error
-            // For now, it will continue trying remaining trades.
-          }
+          // No await here, so they all start almost simultaneously
+          purchasePromises.push(
+            this._performSinglePurchase(contract_type, true) // Pass true for isBulkPurchase
+              .then((result) => {
+                log(LogTypes.PURCHASE, { message: `Bulk purchase ${i + 1} successful.` })
+                return { status: "fulfilled", value: result }
+              })
+              .catch((error) => {
+                log(LogTypes.PURCHASE, { message: `Bulk purchase ${i + 1} failed: ${error.message || error}` })
+                console.error(`Purchase: _performSinglePurchase failed for iteration ${i + 1}. Error:`, error)
+                return { status: "rejected", reason: error }
+              }),
+          )
         }
+
+        // Wait for all purchase promises to settle (either fulfilled or rejected)
+        const purchaseResults = await Promise.allSettled(purchasePromises)
+
         // After all bulk purchases are initiated, explicitly transition to DURING_PURCHASE
         // This ensures the bot moves to the next phase only after all intended bulk trades are sent.
         this.store.dispatch({ type: DURING_PURCHASE, payload: { isBulk: true } })

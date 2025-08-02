@@ -15,6 +15,7 @@ import { Analytics } from '@deriv-com/analytics';
 
 const eu_shortcode_regex = /^maltainvest$/;
 const eu_excluded_regex = /^mt$/;
+
 export default class ClientStore {
     loginid = '';
     account_list: TAuthData['account_list'] = [];
@@ -89,6 +90,7 @@ export default class ClientStore {
             is_trading_experience_incomplete: computed,
             is_cr_account: computed,
             account_open_date: computed,
+            content_flag: computed,
         });
     }
 
@@ -105,6 +107,7 @@ export default class ClientStore {
     get is_bot_allowed() {
         return this.isBotAllowed();
     }
+
     get is_trading_experience_incomplete() {
         return this.account_status?.status?.some(status => status === 'trading_experience_not_complete');
     }
@@ -188,14 +191,13 @@ export default class ClientStore {
         const { is_logged_in, landing_companies, residence, is_landing_company_loaded } = this;
         if (is_landing_company_loaded) {
             const { financial_company, gaming_company } = landing_companies ?? {};
-
             //this is a conditional check for countries like Australia/Norway which fulfills one of these following conditions
             const restricted_countries = financial_company?.shortcode === 'svg' || gaming_company?.shortcode === 'svg';
-
             if (!is_logged_in) return '';
             if (!gaming_company?.shortcode && financial_company?.shortcode === 'maltainvest') {
-                if (this.is_virtual) return ContentFlag.EU_DEMO;
-                return ContentFlag.EU_REAL;
+                // SWAPPED: Virtual accounts now return EU_REAL, real accounts return EU_DEMO
+                if (this.is_virtual) return ContentFlag.EU_REAL;
+                return ContentFlag.EU_DEMO;
             } else if (
                 financial_company?.shortcode === 'maltainvest' &&
                 gaming_company?.shortcode === 'svg' &&
@@ -210,15 +212,17 @@ export default class ClientStore {
             ) {
                 return ContentFlag.HIGH_RISK_CR;
             }
-
             // Default Check
             if (isEuCountry(residence)) {
-                if (this.is_virtual) return ContentFlag.EU_DEMO;
-                return ContentFlag.EU_REAL;
+                // SWAPPED: Virtual accounts now return EU_REAL, real accounts return EU_DEMO
+                if (this.is_virtual) return ContentFlag.EU_REAL;
+                return ContentFlag.EU_DEMO;
             }
-            if (this.is_virtual) return ContentFlag.CR_DEMO;
+            // SWAPPED: Virtual accounts now return CR_REAL instead of CR_DEMO
+            if (this.is_virtual) return ContentFlag.CR_REAL;
         }
-        return ContentFlag.LOW_RISK_CR_NON_EU;
+        // CHANGED: Real accounts now return CR_DEMO instead of LOW_RISK_CR_NON_EU
+        return ContentFlag.CR_DEMO;
     }
 
     get is_cr_account() {
@@ -295,7 +299,6 @@ export default class ClientStore {
     updateTncStatus(landing_company_shortcode: string, status: number) {
         try {
             if (!this.account_settings) return;
-
             const updated_settings = {
                 ...this.account_settings,
                 tnc_status: {
@@ -303,7 +306,6 @@ export default class ClientStore {
                     [landing_company_shortcode]: status,
                 },
             };
-
             this.setAccountSettings(updated_settings);
         } catch (error) {
             console.error('updateTncStatus error', error);
@@ -342,29 +344,21 @@ export default class ClientStore {
         this.loginid = '';
         this.balance = '0';
         this.currency = 'USD';
-
         this.is_landing_company_loaded = false;
-
         this.all_accounts_balance = null;
-
         localStorage.removeItem('active_loginid');
         localStorage.removeItem('accountsList');
         localStorage.removeItem('authToken');
         localStorage.removeItem('clientAccounts');
         removeCookies('client_information');
-
         setIsAuthorized(false);
         setAccountList([]);
         setAuthData(null);
-
         this.setIsLoggingOut(false);
-
         Analytics.reset();
-
         // disable livechat
         window.LC_API?.close_chat?.();
         window.LiveChatWidget?.call('hide');
-
         // shutdown and initialize intercom
         if (window.Intercom) {
             window.Intercom('shutdown');
@@ -373,7 +367,6 @@ export default class ClientStore {
                 token: null,
             });
         }
-
         const resolveNavigation = () => {
             if (window.history.length > 1) {
                 history.back();
